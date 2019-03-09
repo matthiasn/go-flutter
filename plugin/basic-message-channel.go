@@ -4,7 +4,21 @@ import "github.com/pkg/errors"
 
 // BasicMessageHandler defines the interfece for a basic message handler.
 type BasicMessageHandler interface {
-	handleMessage(message interface{}) (reply interface{}, err error)
+	// TODO: the re-use of the term "Handle" is a bit confusing. There's just
+	// too much "handle" going on... net/http used ServeHTTP as method. We need
+	// something like that as well to set the method apart from the handler type.
+	HandleMessage(message interface{}) (reply interface{}, err error)
+}
+
+// The BasicMessageHandlerFunc type is an adapter to allow the use of
+// ordinary functions as basic message handlers. If f is a function
+// with the appropriate signature, BasicMessageHandlerFunc(f) is a
+// BasicMessageHandler that calls f.
+type BasicMessageHandlerFunc func(message interface{}) (reply interface{}, err error)
+
+// HandleMessage calls f(message).
+func (f BasicMessageHandlerFunc) HandleMessage(message interface{}) (reply interface{}, err error) {
+	return f(message)
 }
 
 // BasicMessageChannel presents named channel for communicating with the Flutter
@@ -57,7 +71,7 @@ func (b *BasicMessageChannel) Send(message interface{}) (reply interface{}, err 
 	return reply, nil
 }
 
-// SetMessageHandler registers a message handler on this channel for receiving
+// Handle registers a message handler on this channel for receiving
 // messages sent from the Flutter application.
 //
 // Consecutive calls override any existing handler registration for (the name
@@ -65,11 +79,19 @@ func (b *BasicMessageChannel) Send(message interface{}) (reply interface{}, err 
 //
 // When given nil as handler, any incoming message on this channel will be
 // handled silently by sending a nil reply (null on the dart side).
-func (b *BasicMessageChannel) SetMessageHandler(handler BasicMessageHandler) {
+func (b *BasicMessageChannel) Handle(handler BasicMessageHandler) {
 	b.messenger.SetMessageHandler(b.name, incommingBasicMessageHandler{
 		codec:   b.codec,
 		handler: handler,
 	})
+}
+
+func (b *BasicMessageChannel) HandleFunc(handler func(message interface{}) (reply interface{}, err error)) {
+	if handler == nil {
+		b.Handle(nil)
+	}
+
+	b.Handle(BasicMessageHandlerFunc(handler))
 }
 
 // incommingBasicMessageHandler handles binary messages using
@@ -80,9 +102,9 @@ type incommingBasicMessageHandler struct {
 
 var _ BinaryMessageHandler = incommingBasicMessageHandler{} // compile-time type check
 
-// handleMessage decodes incoming binary, calls the handler, and encodes the
+// HandleMessage decodes incoming binary, calls the handler, and encodes the
 // outgoing reply.
-func (i incommingBasicMessageHandler) handleMessage(encodedMessage []byte) (encodedReply []byte, err error) {
+func (i incommingBasicMessageHandler) HandleMessage(encodedMessage []byte) (encodedReply []byte, err error) {
 	if i.handler == nil {
 		return nil, nil
 	}
@@ -90,7 +112,7 @@ func (i incommingBasicMessageHandler) handleMessage(encodedMessage []byte) (enco
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to decode incomming message")
 	}
-	reply, err := i.handler.handleMessage(message)
+	reply, err := i.handler.HandleMessage(message)
 	if err != nil {
 		return nil, errors.Wrap(err, "handler for incoming basic message failed")
 	}

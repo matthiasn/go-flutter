@@ -8,6 +8,7 @@ package plugin
 
 // // MethodChannel defines
 // type MethodChannel interfaceActuallyThisShouldBeStruct {
+//  // Note: InvokeMethod, not Send.
 // 	InvokeMethod(name string, arguments interface{}) (result interface{}, err error)
 // 	SetMethodCallHandler(handler MethodCallHandler)
 // }
